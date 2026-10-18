@@ -15,12 +15,11 @@ glyphs = list(katakana * 2 + "0123456789" + 'Z:・."=*+-<>¦|')
 
 background = (0,3,0)
 dim_green = (0,90,30)
-highlighted = (230,255,240)
-near_colour = (157, 255, 191)
+highlighted = (230,255,220)
+near_colour = (157, 255, 170)
 
-drop_col = 32 # pull these both out to test
-drop_speed = 12
-drop_length = 25 # how many cells are lit at once 
+speed_min, speed_max = 8, 22
+length_min, length_max = 6, 34
 
 show_grid = False
 
@@ -30,9 +29,25 @@ def colour_shade(t):
     # corresponding colour for brightness t
     r = 20 * t * t # minimal red, max when t = 1
     g = 90 + 165 * t # green values, max when t = 1
-    b = 40 + 40 * t # ranges from 40 to 80
+    b = 20 + 20 * t # ranges from 40 to 80
     k = min(1, t * 1.15)
     return (round(r * k), round(g*k), round(b*k))
+
+class Drop:
+    def __init__(self, col, rows):
+        self.col = col
+        self.rows = rows
+        self.reset(fresh = True)
+
+    def reset(self, fresh):
+        if fresh:
+            self.y = (-random.random() * self.rows) * 1.5
+        else: # once drop is off screen, repeat it but spawns lower so buffer isnt too long
+            self.y = ((-random.random() * self.rows) * 0.6) - 2 
+        self.speed = random.uniform(speed_min, speed_max)
+        self.length = random.randint(length_min, max(length_min + 1, min(length_max, int(self.rows * 0.7))))
+# self length is between min length, and max which is chosen from min length + 1, 
+# or the minimum of max length and 70% of # of rows
 
 # ------- setup -------
 
@@ -59,7 +74,12 @@ for col in range(cols):
         column.append(random.choice(glyphs))
     grid.append(column)
 
-drop_y = 0 # start highlighted at the top
+drops = []
+for col in range(cols):
+    count = 1 + (random.random() < 0.45) + (random.random() < 0.15)
+    # every column gets one drop, 45% chance of 2 and 15% chance for 3
+    for _ in range(count):
+        drops.append(Drop(col, rows)) # create drop object for each count, append to drops list
 
 # -------- Pygame loop --------
 
@@ -72,11 +92,33 @@ while True:
             pygame.quit()
             sys.exit()
 
-    drop_y += drop_speed * dt # this gives us a drop that looks the same on devices running 
-    # at 60 fps and at ones running maybe at 30 if slower, then drop_y will increase by more 
-    # to keep the effect looking the same
-    if drop_y - drop_length > rows: 
-        drop_y = 0
+    for drop in drops:
+        drop.y += drop.speed * dt
+        if drop.y - drop.length > rows:
+            drop.reset(fresh = False)
+
+    lit = {}
+    for drop in drops:
+        head_row = math.floor(drop.y)
+        for k in range(drop.length):
+            row = head_row - k
+            if row < 0 or row >= rows:
+                continue
+            if k == 0:
+                score = 3
+            elif k == 1:
+                score = 2
+            else:
+                t = 1 - (k / drop.length)
+                score = (0.95 * t * t) + (0.05 * t)
+                if score < 0.03:
+                    continue
+
+# ensure that only the brighter drops stay when drops overlap.
+            key = (drop.col, row)
+            if score > lit.get(key,0):
+                lit[key] = score
+
 
     # draw background
     screen.fill(background)
@@ -91,20 +133,15 @@ while True:
         # still rendering in the loop which is not efficient, for eah character need to render
         # 60 times per second
 
-    head_row = math.floor(drop_y)
-    for k in range(drop_length):
-        row = head_row - k
-        if row < 0 or row >= rows:
-            continue
-        if k == 0:
+    for (col,row), score in lit.items():
+        if score == 3:
             colour = highlighted # brightest
-        if k == 1:
+        elif score == 2:
             colour = near_colour # one off brightest
         else:
-            t = 1 - (k / drop_length) # use colourshade function to get colours for remaining rows
-            colour = colour_shade((0.95 * t * t) + (0.05 * t)) # so the drop off is more abrupt
-        image = font.render(grid[drop_col][row], True, colour)
-        screen.blit(image, (drop_col*cell_w, row*cell_h))
+            colour = colour_shade(score)
+        image = font.render(grid[col][row], True, colour)
+        screen.blit(image, (col*cell_w, row*cell_h))
 
     pygame.display.flip()
     pygame.display.set_caption(f"Digital Rain - {clock.get_fps():.0f} fps")
