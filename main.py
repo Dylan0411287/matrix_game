@@ -93,9 +93,21 @@ while True:
             sys.exit()
 
     for drop in drops:
+        before = math.floor(drop.y)
         drop.y += drop.speed * dt
+        after = math.floor(drop.y)
+
+        if after != before:
+            if 0 <= after < rows:
+                grid[drop.col][after] = random.choice(glyphs)
+
         if drop.y - drop.length > rows:
             drop.reset(fresh = False)
+
+    for _ in range(int(cols * rows * 0.005) + 1): # glitches in random places for 0.5% of grid
+        c = random.randrange(cols)
+        r = random.randrange(rows)
+        grid[c][r] = random.choice(glyphs) # replace some char in grid with another random char
 
     lit = {}
     for drop in drops:
@@ -141,7 +153,11 @@ while True:
         else:
             colour = colour_shade(score)
         image = font.render(grid[col][row], True, colour)
-        screen.blit(image, (col*cell_w, row*cell_h))
+        image = pygame.transform.flip(image, True, False)
+        x = (col * cell_w) - (cell_w - image.get_width()) // 2 # centering the characters in cell
+        y = (row * cell_h) - (cell_h - image.get_height()) // 2
+
+        screen.blit(image, (x, y))
 
     pygame.display.flip()
     pygame.display.set_caption(f"Digital Rain - {clock.get_fps():.0f} fps")
