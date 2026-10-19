@@ -50,50 +50,65 @@ class Drop:
 # self length is between min length, and max which is chosen from min length + 1, 
 # or the minimum of max length and 70% of # of rows
 
+def make_window(fullscreen):
+    if fullscreen:
+        screen = pygame.display.set_mode((0,0), pygame.FULLSCREEN) # make window fullscreen
+    else:
+        screen = pygame.display.set_mode((1280,720), pygame.RESIZABLE) # 1280 x 720 window
+    pygame.mouse.set_visible(not fullscreen)
+    return screen
+
+def build(screen, char_size):
+    # create everything that depends on screen and character size so we can regenrate for
+    #diff settings
+    font = pygame.font.Font(str(font_path), char_size)
+    
+    width, height = screen.get_size()
+    cell_w = int(char_size * 0.8) # toggle the width and height of cell until the effect looks good
+    cell_h = int(char_size * 1.15)
+    cols = (width // cell_w) + 1
+    rows = (height // cell_h) + 2 # extra rows and column for the ones that are cut off
+
+    grid = [] # empty list for grid, selects a row, generates a random glyph for each row, appends
+          # to the column list, so we have (# of columns) lists of (# of rows) glyphs, #
+          # append to grid list, so grid[0] is 0th column/first one, grid[0][3]-4th char in col 0
+    for col in range(cols):
+        column = []
+        for row in range(rows):
+            column.append(random.choice(glyphs))
+        grid.append(column)
+
+    drops = []
+    for col in range(cols):
+        count = 1 + (random.random() < 0.45) + (random.random() < 0.15)
+        # every column gets one drop, 45% chance of 2 and 15% chance for 3
+        for _ in range(count):
+            drops.append(Drop(col, rows)) # create drop object for each count, append to drops list
+
+    colours = []
+    for i in range(steps + 1):
+        colours.append(colour_shade(i / steps))
+    colours.append(near_colour)
+    colours.append(highlighted)
+
+    glyph_cache = {} # store character and brightness level
+    for ch in set(glyphs):
+        for level, colour in enumerate(colours):
+            image = font.render(ch, True, colour).convert_alpha()
+            glyph_cache[(ch, level)] = pygame.transform.flip(image, True, False)
+    return font, cell_w, cell_h, cols, rows, grid, drops, glyph_cache
+
 # ------- setup -------
 
 pygame.init()
-screen = pygame.display.set_mode((1280,720)) # 1280 x 720 window
 clock = pygame.time.Clock()
-font = pygame.font.Font(str(font_path), char_size)
 
-colours = []
-for i in range(steps + 1):
-    colours.append(colour_shade(i / steps))
-colours.append(near_colour)
-colours.append(highlighted)
+fullscreen = False
+speed_mult = 1
+paused = False
 
-glyph_cache = {} # store character and brightness level
-for ch in set(glyphs):
-    for level, colour in enumerate(colours):
-        image = font.render(ch, True, colour).convert_alpha()
-        glyph_cache[(ch, level)] = pygame.transform.flip(image, True, False)
-
-
-width, height = screen.get_size()
-cell_w = int(char_size * 0.8) # toggle the width and height of cell until the effect looks good
-cell_h = int(char_size * 1.15)
-cols = (width // cell_w) + 1
-rows = (height // cell_h) + 2 # extra rows and column for the ones that are cut off
-
-# create grid (OUTSIDE THE LOOP SO ONLY ONE UNIQUE GRID IS CREATED)
-# if inside loop, basically the characters will keep changing every second
-
-grid = [] # empty list for grid, selects a row, generates a random glyph for each row, appends
-          # to the column list, so we have (# of columns) lists of (# of rows) glyphs, #
-          # append to grid list, so grid[0] is 0th column/first one, grid[0][3]-4th char in col 0
-for col in range(cols):
-    column = []
-    for row in range(rows):
-        column.append(random.choice(glyphs))
-    grid.append(column)
-
-drops = []
-for col in range(cols):
-    count = 1 + (random.random() < 0.45) + (random.random() < 0.15)
-    # every column gets one drop, 45% chance of 2 and 15% chance for 3
-    for _ in range(count):
-        drops.append(Drop(col, rows)) # create drop object for each count, append to drops list
+screen = make_window(fullscreen)# depending on screen size:
+font, cell_w, cell_h, cols, rows, grid, drops, glyph_cache = build(screen, char_size)
 
 # -------- Pygame loop --------
 
@@ -102,26 +117,54 @@ while True:
     dt = min(dt, 0.05)
 
     for event in pygame.event.get():
-        if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
+        if event.type == pygame.QUIT:
             pygame.quit()
             sys.exit()
 
-    for drop in drops:
-        before = math.floor(drop.y)
-        drop.y += drop.speed * dt
-        after = math.floor(drop.y)
+        if event.type == pygame.KEYDOWN: # now including speed up/down, space to pause, text size
+            if event.key == pygame.K_ESCAPE:
+                pygame.quit()
+                sys.exit()
 
-        if after != before:
-            if 0 <= after < rows:
-                grid[drop.col][after] = random.choice(glyphs)
+            elif event.key in (pygame.K_f, pygame.K_F11):
+                fullscreen = not fullscreen
+                screen = make_window(fullscreen)
+                font, cell_w, cell_h, cols, rows, grid, drops, glyph_cache = build(screen, char_size)
 
-        if drop.y - drop.length > rows:
-            drop.reset(fresh = False)
+            elif event.key == pygame.K_SPACE:
+                paused = not paused
 
-    for _ in range(int(cols * rows * 0.005) + 1): # glitches in random places for 0.5% of grid
-        c = random.randrange(cols)
-        r = random.randrange(rows)
-        grid[c][r] = random.choice(glyphs) # replace some char in grid with another random char
+            elif event.key in (pygame.K_PLUS, pygame.K_EQUALS, pygame.K_KP_PLUS):
+                speed_mult = min(4, speed_mult * 1.25)
+
+            elif event.key in (pygame.K_MINUS, pygame.K_KP_MINUS):
+                speed_mult = max(0.15, speed_mult / 1.25)
+
+            elif event.key == pygame.K_RIGHTBRACKET:
+                char_size = min(40, char_size + 2) # 2 size increase each time
+                font, cell_w, cell_h, cols, rows, grid, drops, glyph_cache = build(screen, char_size)
+
+            elif event.key == pygame.K_LEFTBRACKET:
+                char_size = max(10, char_size - 2)
+                font, cell_w, cell_h, cols, rows, grid, drops, glyph_cache = build(screen, char_size)
+
+    if not paused:
+        for drop in drops:
+            before = math.floor(drop.y)
+            drop.y += drop.speed * speed_mult * dt
+            after = math.floor(drop.y)
+
+            if after != before:
+                if 0 <= after < rows:
+                    grid[drop.col][after] = random.choice(glyphs)
+
+            if drop.y - drop.length > rows:
+                drop.reset(fresh = False)
+
+        for _ in range(int(cols * rows * 0.005 * speed_mult) + 1): # glitches in random places for 0.5% of grid
+            c = random.randrange(cols)
+            r = random.randrange(rows)
+            grid[c][r] = random.choice(glyphs) # replace some char in grid with another random char
 
     lit = {}
     for drop in drops:
@@ -162,4 +205,4 @@ while True:
     screen.blits(blits, doreturn=False)
 
     pygame.display.flip()
-    pygame.display.set_caption(f"Digital Rain - {clock.get_fps():.0f} fps")
+    pygame.display.set_caption(f"Digital Rain - {clock.get_fps():.0f} fps - speed x{speed_mult:.2f} - size {char_size}")
