@@ -22,6 +22,7 @@ speed_min, speed_max = 8, 22
 length_min, length_max = 6, 34
 
 show_grid = False
+steps = 24 # turn the scores into a brightness level from 0 to 24
 
 # ------- functions -------
 
@@ -55,6 +56,19 @@ pygame.init()
 screen = pygame.display.set_mode((1280,720)) # 1280 x 720 window
 clock = pygame.time.Clock()
 font = pygame.font.Font(str(font_path), char_size)
+
+colours = []
+for i in range(steps + 1):
+    colours.append(colour_shade(i / steps))
+colours.append(near_colour)
+colours.append(highlighted)
+
+glyph_cache = {} # store character and brightness level
+for ch in set(glyphs):
+    for level, colour in enumerate(colours):
+        image = font.render(ch, True, colour).convert_alpha()
+        glyph_cache[(ch, level)] = pygame.transform.flip(image, True, False)
+
 
 width, height = screen.get_size()
 cell_w = int(char_size * 0.8) # toggle the width and height of cell until the effect looks good
@@ -131,33 +145,21 @@ while True:
             if score > lit.get(key,0):
                 lit[key] = score
 
-
-    # draw background
     screen.fill(background)
 
-    # display the grid
-    if show_grid:
-        for col in range(cols):
-            for row in range(rows):
-                char = grid[col][row] # grid is our data, we need to pull each entry and display it
-                image = font.render(char, True, dim_green) # render grid
-                screen.blit(image, (col*cell_w, row*cell_h)) # display each in correct col/row
-        # still rendering in the loop which is not efficient, for eah character need to render
-        # 60 times per second
-
+    blits = []
     for (col,row), score in lit.items():
         if score == 3:
-            colour = highlighted # brightest
+            level = steps + 2 # brightest
         elif score == 2:
-            colour = near_colour # one off brightest
+            steps + 1 # one off brightest
         else:
-            colour = colour_shade(score)
-        image = font.render(grid[col][row], True, colour)
-        image = pygame.transform.flip(image, True, False)
+            level = round(score * steps) # convert decimal scores into a integer step
+        image = glyph_cache[(grid[col][row], level)]
         x = (col * cell_w) - (cell_w - image.get_width()) // 2 # centering the characters in cell
         y = (row * cell_h) - (cell_h - image.get_height()) // 2
-
-        screen.blit(image, (x, y))
+        blits.append((image, (x, y)))
+    screen.blits(blits, doreturn=False)
 
     pygame.display.flip()
     pygame.display.set_caption(f"Digital Rain - {clock.get_fps():.0f} fps")
