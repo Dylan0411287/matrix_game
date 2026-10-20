@@ -26,19 +26,16 @@ steps = 24 # turn the scores into a brightness level from 0 to 24
 
 # ------- functions -------
 
-trail_colour = (110, 255, 40)
-pale_falloff = 6
+trail_colour = (130, 255, 40)
+pale_falloff = 2
 
 def mix(a, b, f): # blending a to b with fraction f
     return tuple(round(a[i] + (b[i] - a[i]) * f) for i in range(3)) # rgb values for fade
 
 def colour_shade(t):
-    # corresponding colour for brightness t
-    r = 20 * t * t # minimal red, max when t = 1
-    g = 90 + 165 * t # green values, max when t = 1
-    b = 20 + 20 * t # ranges from 40 to 80
-    k = min(1, t * 1.15)
-    return (round(r * k), round(g*k), round(b*k))
+    colour = mix(trail_colour, near_colour, t ** pale_falloff)
+    brightness = min(1, t * 1.15)
+    return mix((0,0,0), colour, brightness)
 
 class Drop:
     def __init__(self, col, rows):
@@ -108,7 +105,7 @@ def build(screen, char_size, prefill = False):
 
     if prefill:
         for drop in drops:
-            drop.y = random.uniform(0, rows + drop.length)
+            drop.y = random.uniform(-(0.3 * rows + 2), rows + drop.length)
 
     return font, cell_w, cell_h, cols, rows, grid, drops, glyph_cache, scanlines, vignette
 
@@ -141,7 +138,7 @@ paused = False
 crt_on = True
 
 screen = make_window(fullscreen)# depending on screen size:
-font, cell_w, cell_h, cols, rows, grid, drops, glyph_cache, scanlines, vignette = build(screen, char_size, prefill=True)
+font, cell_w, cell_h, cols, rows, grid, drops, glyph_cache, scanlines, vignette = build(screen, char_size)
 
 # -------- Pygame loop --------
 
