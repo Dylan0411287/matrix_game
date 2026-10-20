@@ -26,6 +26,12 @@ steps = 24 # turn the scores into a brightness level from 0 to 24
 
 # ------- functions -------
 
+trail_colour = (110, 255, 40)
+pale_falloff = 6
+
+def mix(a, b, f): # blending a to b with fraction f
+    return tuple(round(a[i] + (b[i] - a[i]) * f) for i in range(3)) # rgb values for fade
+
 def colour_shade(t):
     # corresponding colour for brightness t
     r = 20 * t * t # minimal red, max when t = 1
@@ -58,7 +64,7 @@ def make_window(fullscreen):
     pygame.mouse.set_visible(not fullscreen)
     return screen
 
-def build(screen, char_size):
+def build(screen, char_size, prefill = False):
     # create everything that depends on screen and character size so we can regenrate for
     #diff settings
     font = pygame.font.Font(str(font_path), char_size)
@@ -96,7 +102,33 @@ def build(screen, char_size):
         for level, colour in enumerate(colours):
             image = font.render(ch, True, colour).convert_alpha()
             glyph_cache[(ch, level)] = pygame.transform.flip(image, True, False)
-    return font, cell_w, cell_h, cols, rows, grid, drops, glyph_cache
+
+    scanlines = build_scan(width, height)
+    vignette = build_vignette(width, height)
+
+    if prefill:
+        for drop in drops:
+            drop.y = random.uniform(0, rows + drop.length)
+
+    return font, cell_w, cell_h, cols, rows, grid, drops, glyph_cache, scanlines, vignette
+
+def build_scan(width, height): # scan lines on crt monitors
+    surf = pygame.Surface((width, height), pygame.SRCALPHA)
+    for y in range(0, height, 3):
+        pygame.draw.line(surf, (0,0,0,200), (0, y+2), (width, y+2))
+    return surf
+
+def build_vignette(width, height): # viginette on crt monitor
+    w, h = 160, 90 # make it smaller and then scale up depending on screen size
+    small_vig = pygame.Surface((w, h), pygame.SRCALPHA)
+    for x in range(w):
+        for y in range(h):
+            dx = (x - (w/2)) / (w-2) # distance from center (width)
+            dy = (y - (h/2)) / (h-2) # distance from center (height)
+            d = math.sqrt((dx * dx) + (dy * dy)) # radial distance
+            strength = max(0, min(1, (d - 0.55) / 0.85)) # capped at 0 and 1
+            small_vig.set_at((x, y), (0, 0, 0, int(strength * 190)))
+    return pygame.transform.smoothscale(small_vig, (width, height))
 
 # ------- setup -------
 
@@ -106,9 +138,10 @@ clock = pygame.time.Clock()
 fullscreen = False
 speed_mult = 1
 paused = False
+crt_on = True
 
 screen = make_window(fullscreen)# depending on screen size:
-font, cell_w, cell_h, cols, rows, grid, drops, glyph_cache = build(screen, char_size)
+font, cell_w, cell_h, cols, rows, grid, drops, glyph_cache, scanlines, vignette = build(screen, char_size, prefill=True)
 
 # -------- Pygame loop --------
 
@@ -129,8 +162,7 @@ while True:
             elif event.key in (pygame.K_f, pygame.K_F11):
                 fullscreen = not fullscreen
                 screen = make_window(fullscreen)
-                font, cell_w, cell_h, cols, rows, grid, drops, glyph_cache = build(screen, char_size)
-
+                font, cell_w, cell_h, cols, rows, grid, drops, glyph_cache, scanlines, vignette = build(screen, char_size, prefill = True)
             elif event.key == pygame.K_SPACE:
                 paused = not paused
 
@@ -142,11 +174,14 @@ while True:
 
             elif event.key == pygame.K_RIGHTBRACKET:
                 char_size = min(40, char_size + 2) # 2 size increase each time
-                font, cell_w, cell_h, cols, rows, grid, drops, glyph_cache = build(screen, char_size)
+                font, cell_w, cell_h, cols, rows, grid, drops, glyph_cache, scanlines, vignette = build(screen, char_size, prefill = True)
 
             elif event.key == pygame.K_LEFTBRACKET:
                 char_size = max(10, char_size - 2)
-                font, cell_w, cell_h, cols, rows, grid, drops, glyph_cache = build(screen, char_size)
+                font, cell_w, cell_h, cols, rows, grid, drops, glyph_cache, scanlines, vignette = build(screen, char_size, prefill = True)
+
+            elif event.key == pygame.K_c:
+                crt_on = not crt_on
 
     if not paused:
         for drop in drops:
@@ -203,6 +238,16 @@ while True:
         y = (row * cell_h) - (cell_h - image.get_height()) // 2
         blits.append((image, (x, y)))
     screen.blits(blits, doreturn=False)
+
+    if crt_on:
+        w,h = screen.get_size()
+        small = pygame.transform.smoothscale(screen, (w // 6, h // 6)) # scale down to 1/6
+        small = pygame.transform.smoothscale(small, (w // 12, h // 12)) # then down to 1/12 # steps is cleaner scale rather than too pixelated
+        blur = pygame.transform.smoothscale(small, (w,h))
+        screen.blit(blur, (0,0), special_flags=pygame.BLEND_ADD)
+
+        screen.blit(scanlines, (0,0))
+        screen.blit(vignette, (0,0))
 
     pygame.display.flip()
     pygame.display.set_caption(f"Digital Rain - {clock.get_fps():.0f} fps - speed x{speed_mult:.2f} - size {char_size}")
