@@ -19,13 +19,6 @@ A recreation of the "digital rain" code effect from *The Matrix*, written in Pyt
 
 ---
 
-## Download (Windows)
-
-No Python needed. Download `DigitalRain.exe` from the [Releases](https://github.com/YOUR-USERNAME/matrix_rain/releases) page and double-click it.
-
-> Windows may show a "Windows protected your PC" warning, because the app isn't signed. Click **More info**, then **Run anyway**.
-
----
 
 ## Running from source
 
