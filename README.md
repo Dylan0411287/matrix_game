@@ -25,7 +25,7 @@ A recreation of the "digital rain" code effect from *The Matrix*, written in Pyt
 Requires Python 3.10 or newer.
 
 ```bash
-git clone https://github.com/YOUR-USERNAME/matrix_rain.git
+git clone https://github.com/Dylan0411287/matrix_game.git
 cd matrix_rain
 python -m venv .venv
 .venv\Scripts\activate          # Mac/Linux: source .venv/bin/activate
